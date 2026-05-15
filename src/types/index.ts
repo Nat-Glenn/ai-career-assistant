@@ -2,7 +2,8 @@
  * Shared TypeScript types used across the app.
  */
 
-export type { Job } from "./job";
+export type { DiscoveredJob } from "./job";
+export { discoveredJobSchema, discoveredJobListSchema } from "./job";
 export type { Application, ApplicationStatus } from "./application";
 export {
   applicationSchema,

@@ -127,3 +127,18 @@ export const updateApplicationSchema = z
   });
 
 export type UpdateApplicationBody = z.infer<typeof updateApplicationSchema>;
+
+/**
+ * Validates POST /api/jobs (job discovery) request body.
+ */
+export const discoverJobsSchema = z.object({
+  query: z.string().trim().min(1, "Search query is required.").max(200),
+  location: z.string().trim().max(200).optional(),
+  remoteOnly: z.boolean().optional(),
+  keywords: z
+    .array(z.string().trim().min(1).max(50))
+    .max(20, "At most 20 keywords allowed.")
+    .optional(),
+});
+
+export type DiscoverJobsInput = z.infer<typeof discoverJobsSchema>;
