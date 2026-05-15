@@ -32,8 +32,9 @@ export default function JobsPage() {
             Job discovery
           </h1>
           <p className="mt-3 text-muted">
-            Search publicly listed remote jobs, review relevance scores, and
-            open a posting to analyze or apply.
+            Discover jobs from your saved career preferences, or run a manual
+            search. Review relevance scores and open a posting to analyze or
+            apply.
           </p>
         </div>
 

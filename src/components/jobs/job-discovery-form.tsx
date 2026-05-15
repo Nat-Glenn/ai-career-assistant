@@ -33,7 +33,7 @@ export function JobDiscoveryForm({
   return (
     <section className="rounded-xl border border-card-border bg-card p-5">
       <h2 className="mb-4 text-sm font-medium uppercase tracking-wider text-muted">
-        Search jobs
+        Or search manually
       </h2>
       <form onSubmit={onSubmit} className="space-y-4">
         <div>

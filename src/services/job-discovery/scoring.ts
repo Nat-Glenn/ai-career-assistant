@@ -1,8 +1,21 @@
 import type { DiscoveredJob } from "@/types/job";
+import type { ExperienceLevel } from "@/types/profile";
 
 export type ScoringPreferences = {
   query: string;
   keywords?: string[];
+  targetRoles?: string[];
+  coreSkills?: string[];
+  preferredKeywords?: string[];
+  experienceLevel?: ExperienceLevel;
+};
+
+const EXPERIENCE_TERMS: Record<ExperienceLevel, string[]> = {
+  internship: ["intern", "internship", "co-op"],
+  entry: ["entry", "entry-level", "graduate", "new grad"],
+  junior: ["junior", "jr"],
+  intermediate: ["mid", "intermediate", "ii"],
+  senior: ["senior", "sr", "lead", "principal", "staff"],
 };
 
 function buildSearchText(
@@ -40,10 +53,30 @@ export function scoreJob(
     }
   }
 
-  for (const keyword of preferences.keywords ?? []) {
+  const keywordTerms = [
+    ...(preferences.keywords ?? []),
+    ...(preferences.coreSkills ?? []),
+    ...(preferences.preferredKeywords ?? []),
+  ];
+
+  for (const keyword of keywordTerms) {
     const normalized = keyword.toLowerCase().trim();
     if (normalized && text.includes(normalized)) {
       score += 18;
+    }
+  }
+
+  for (const role of preferences.targetRoles ?? []) {
+    const normalized = role.toLowerCase().trim();
+    if (normalized && text.includes(normalized)) {
+      score += 10;
+    }
+  }
+
+  if (preferences.experienceLevel) {
+    const terms = EXPERIENCE_TERMS[preferences.experienceLevel];
+    if (terms.some((term) => text.includes(term))) {
+      score += 8;
     }
   }
 
