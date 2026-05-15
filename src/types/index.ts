@@ -13,3 +13,5 @@ export type {
   RewrittenBullet,
 } from "./resume-tailoring";
 export { resumeTailoringResultSchema } from "./resume-tailoring";
+export type { AtsOptimizationResult } from "./ats-optimization";
+export { atsOptimizationResultSchema } from "./ats-optimization";

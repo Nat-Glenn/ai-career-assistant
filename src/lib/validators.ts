@@ -33,3 +33,11 @@ export const tailorResumeSchema = z.object({
 });
 
 export type TailorResumeInput = z.infer<typeof tailorResumeSchema>;
+
+/**
+ * Validates POST /api/resume/ats-optimize request body.
+ * Same fields as tailoring — resume + job description.
+ */
+export const atsOptimizeSchema = tailorResumeSchema;
+
+export type AtsOptimizeInput = z.infer<typeof atsOptimizeSchema>;

@@ -3,3 +3,4 @@
  */
 
 export { tailorResume } from "./tailor";
+export { optimizeResumeForAts } from "./ats-optimize";
