@@ -12,6 +12,9 @@ type ApiErrorBody = {
 
 type ApiJobBody = { data: DiscoveredJob };
 type ApiPackageBody = { data: ApplicationPackage };
+type ApiProfileBody = {
+  data: { resumeText?: string };
+};
 
 const textareaClassName =
   "w-full rounded-xl border border-card-border bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent";
@@ -25,9 +28,11 @@ type JobPackageWorkflowProps = {
 export function JobPackageWorkflow({ jobId }: JobPackageWorkflowProps) {
   const [job, setJob] = useState<DiscoveredJob | null>(null);
   const [resumeText, setResumeText] = useState("");
+  const [resumeLoadedFromProfile, setResumeLoadedFromProfile] = useState(false);
   const [applicationPackage, setApplicationPackage] =
     useState<ApplicationPackage | null>(null);
   const [isLoadingJob, setIsLoadingJob] = useState(true);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -55,9 +60,34 @@ export function JobPackageWorkflow({ jobId }: JobPackageWorkflowProps) {
     }
   }, [jobId]);
 
+  const loadProfile = useCallback(async () => {
+    setIsLoadingProfile(true);
+
+    try {
+      const response = await fetch("/api/profile");
+      const json = (await response.json()) as ApiProfileBody & ApiErrorBody;
+
+      if (!response.ok) {
+        return;
+      }
+
+      const savedResume = json.data.resumeText?.trim();
+
+      if (savedResume) {
+        setResumeText(savedResume);
+        setResumeLoadedFromProfile(true);
+      }
+    } catch {
+      // Profile prefill is optional; paste workflow still works.
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadJob();
-  }, [loadJob]);
+    void loadProfile();
+  }, [loadJob, loadProfile]);
 
   async function handleGenerate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -208,6 +238,26 @@ export function JobPackageWorkflow({ jobId }: JobPackageWorkflowProps) {
         <h2 className="mb-4 text-sm font-medium uppercase tracking-wider text-muted">
           Your resume
         </h2>
+        {isLoadingProfile && (
+          <p className="mb-3 text-xs text-muted">Checking career profile…</p>
+        )}
+        {!isLoadingProfile && resumeLoadedFromProfile && (
+          <p className="mb-3 text-xs text-accent">
+            Loaded resume from your career profile
+          </p>
+        )}
+        {!isLoadingProfile && !resumeLoadedFromProfile && (
+          <p className="mb-3 text-xs text-muted">
+            Paste your resume below, or{" "}
+            <Link
+              href="/profile"
+              className="text-accent underline-offset-2 hover:underline"
+            >
+              save one on your career profile
+            </Link>{" "}
+            to auto-fill next time.
+          </p>
+        )}
         <form onSubmit={handleGenerate} className="space-y-4">
           <textarea
             id="resumeText"

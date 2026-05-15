@@ -31,7 +31,8 @@ export default async function JobPackagePage({ params }: JobPackagePageProps) {
           </h1>
           <p className="mt-3 text-muted">
             Generate analysis, ATS suggestions, tailored resume bullets, and a
-            cover letter for this role in one workflow.
+            cover letter for this role. Your saved career profile resume will
+            pre-fill when available — edit it before generating.
           </p>
         </div>
 
