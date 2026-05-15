@@ -21,6 +21,13 @@ export type DiscoverJobsInput = {
   keywords?: string[];
 };
 
+export class JobNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Job not found: ${id}`);
+    this.name = "JobNotFoundError";
+  }
+}
+
 async function readJobs(): Promise<DiscoveredJob[]> {
   try {
     const raw = await fs.readFile(DATA_FILE, "utf-8");
@@ -95,6 +102,17 @@ function filterJobs(
 /**
  * Returns all jobs stored in data/jobs.json, sorted by relevance then date.
  */
+export async function getDiscoveredJob(id: string): Promise<DiscoveredJob> {
+  const jobs = await readJobs();
+  const job = jobs.find((item) => item.id === id);
+
+  if (!job) {
+    throw new JobNotFoundError(id);
+  }
+
+  return job;
+}
+
 export async function listDiscoveredJobs(): Promise<DiscoveredJob[]> {
   const jobs = await readJobs();
 

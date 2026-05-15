@@ -4,6 +4,7 @@
 
 export type { DiscoveredJob } from "./job";
 export { discoveredJobSchema, discoveredJobListSchema } from "./job";
+export type { ApplicationPackage } from "./application-package";
 export type { Application, ApplicationStatus } from "./application";
 export {
   applicationSchema,

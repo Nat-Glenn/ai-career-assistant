@@ -76,7 +76,6 @@ export default function Home() {
                 title={feature.title}
                 description={feature.description}
                 href={feature.href}
-                status={"status" in feature ? feature.status : undefined}
               />
             ))}
           </div>

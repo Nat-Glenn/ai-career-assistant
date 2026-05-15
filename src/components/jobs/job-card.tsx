@@ -54,11 +54,17 @@ export function JobCard({ job }: JobCardProps) {
       )}
 
       <div className="flex flex-wrap gap-3">
+        <Link
+          href={`/jobs/${job.id}`}
+          className="text-sm font-medium text-accent hover:underline"
+        >
+          Application package →
+        </Link>
         <a
           href={job.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-sm font-medium text-accent hover:underline"
+          className="text-sm font-medium text-foreground hover:text-accent"
         >
           View posting →
         </a>

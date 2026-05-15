@@ -142,3 +142,16 @@ export const discoverJobsSchema = z.object({
 });
 
 export type DiscoverJobsInput = z.infer<typeof discoverJobsSchema>;
+
+/**
+ * Validates POST /api/jobs/[id]/package request body.
+ */
+export const generatePackageSchema = z.object({
+  resumeText: z
+    .string()
+    .trim()
+    .min(100, "Resume must be at least 100 characters.")
+    .max(20000, "Resume must be at most 20,000 characters."),
+});
+
+export type GeneratePackageInput = z.infer<typeof generatePackageSchema>;
