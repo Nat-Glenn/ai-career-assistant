@@ -1,0 +1,5 @@
+/**
+ * Cover letter generation.
+ */
+
+export {};
