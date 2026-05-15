@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { applicationStatusSchema } from "@/types/application";
 import { coverLetterToneSchema } from "@/types/cover-letter";
+import {
+  experienceLevelSchema,
+  remotePreferenceSchema,
+} from "@/types/profile";
 
 /**
  * Validates POST /api/jobs/analyze request body.
@@ -155,3 +159,24 @@ export const generatePackageSchema = z.object({
 });
 
 export type GeneratePackageInput = z.infer<typeof generatePackageSchema>;
+
+const profileStringList = z
+  .array(z.string().trim().min(1).max(100))
+  .max(30, "At most 30 items allowed.");
+
+/**
+ * Validates PUT /api/profile request body.
+ */
+export const updateProfileSchema = z.object({
+  fullName: z.string().trim().max(120).optional(),
+  targetRoles: profileStringList,
+  targetLocations: profileStringList,
+  remotePreference: remotePreferenceSchema,
+  coreSkills: profileStringList,
+  preferredKeywords: profileStringList,
+  excludedKeywords: profileStringList.optional(),
+  experienceLevel: experienceLevelSchema,
+  resumeText: z.string().trim().max(20000).optional(),
+});
+
+export type UpdateProfileBody = z.infer<typeof updateProfileSchema>;

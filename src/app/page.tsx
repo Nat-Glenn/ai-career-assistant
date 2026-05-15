@@ -37,6 +37,12 @@ const features = [
       "Track companies, roles, status, follow-up dates, and notes for every application in one place.",
     href: "/applications",
   },
+  {
+    title: "Career Preferences",
+    description:
+      "Set target roles, locations, skills, and keywords so the app can remember how you want to search.",
+    href: "/profile",
+  },
 ] as const;
 
 export default function Home() {

@@ -44,3 +44,4 @@ next-env.d.ts
 # MVP local data (JSON stores)
 /data/applications.json
 /data/jobs.json
+/data/profile.json

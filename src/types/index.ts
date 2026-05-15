@@ -26,3 +26,13 @@ export {
   coverLetterResultSchema,
   coverLetterToneSchema,
 } from "./cover-letter";
+export type {
+  UserProfile,
+  RemotePreference,
+  ExperienceLevel,
+} from "./profile";
+export {
+  userProfileSchema,
+  remotePreferenceSchema,
+  experienceLevelSchema,
+} from "./profile";
