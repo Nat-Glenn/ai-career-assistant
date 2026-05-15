@@ -1,4 +1,8 @@
-import type { Application, ApplicationStatus } from "@/types/application";
+import {
+  applicationHasAiMaterials,
+  type Application,
+  type ApplicationStatus,
+} from "@/types/application";
 
 const STATUS_LABELS: Record<ApplicationStatus, string> = {
   saved: "Saved",
@@ -26,6 +30,8 @@ export function ApplicationCard({
   onStatusChange,
   onDelete,
 }: ApplicationCardProps) {
+  const hasAiMaterials = applicationHasAiMaterials(application);
+
   return (
     <article className="rounded-xl border border-card-border bg-card p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -34,6 +40,18 @@ export function ApplicationCard({
             {application.roleTitle}
           </h3>
           <p className="text-sm text-muted">{application.companyName}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {application.matchScore !== undefined && (
+              <span className="rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 text-xs text-accent">
+                ATS match {application.matchScore}
+              </span>
+            )}
+            {hasAiMaterials && (
+              <span className="rounded-full border border-card-border bg-background px-2.5 py-0.5 text-xs text-muted">
+                AI materials saved
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select
@@ -92,7 +110,75 @@ export function ApplicationCard({
         </p>
       )}
 
-      <p className="text-xs text-muted">
+      {hasAiMaterials && (
+        <details className="mt-3 rounded-lg border border-card-border bg-background p-3">
+          <summary className="cursor-pointer text-sm font-medium text-accent">
+            View saved AI materials
+          </summary>
+          <div className="mt-3 space-y-4 text-sm text-foreground">
+            {application.analyzedAt && (
+              <p className="text-xs text-muted">
+                Generated{" "}
+                {new Date(application.analyzedAt).toLocaleString()}
+              </p>
+            )}
+            {application.tailoredSummary && (
+              <div>
+                <p className="mb-1 text-xs font-medium uppercase text-muted">
+                  Tailored summary
+                </p>
+                <p className="leading-relaxed">{application.tailoredSummary}</p>
+              </div>
+            )}
+            {application.rewrittenBullets &&
+              application.rewrittenBullets.length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs font-medium uppercase text-muted">
+                    Rewritten bullets ({application.rewrittenBullets.length})
+                  </p>
+                  <ul className="space-y-2">
+                    {application.rewrittenBullets.map((bullet, index) => (
+                      <li
+                        key={`${bullet.original}-${index}`}
+                        className="rounded-lg border border-card-border px-3 py-2"
+                      >
+                        <p className="text-muted line-through text-xs">
+                          {bullet.original}
+                        </p>
+                        <p className="mt-1">{bullet.rewritten}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            {application.atsPriorityFixes &&
+              application.atsPriorityFixes.length > 0 && (
+                <div>
+                  <p className="mb-1 text-xs font-medium uppercase text-muted">
+                    ATS priority fixes
+                  </p>
+                  <ul className="list-inside list-disc space-y-1">
+                    {application.atsPriorityFixes.map((fix) => (
+                      <li key={fix}>{fix}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            {application.generatedCoverLetter && (
+              <div>
+                <p className="mb-1 text-xs font-medium uppercase text-muted">
+                  Cover letter
+                </p>
+                <p className="whitespace-pre-wrap leading-relaxed">
+                  {application.generatedCoverLetter}
+                </p>
+              </div>
+            )}
+          </div>
+        </details>
+      )}
+
+      <p className="mt-3 text-xs text-muted">
         Updated {new Date(application.updatedAt).toLocaleString()}
       </p>
     </article>

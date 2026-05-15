@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { applicationStatusSchema } from "@/types/application";
+import { rewrittenBulletSchema } from "@/types/resume-tailoring";
 import { coverLetterToneSchema } from "@/types/cover-letter";
 import {
   experienceLevelSchema,
@@ -83,6 +84,18 @@ const optionalFollowUpDate = z
   .optional()
   .or(z.literal("").transform(() => undefined));
 
+const applicationAiMaterialsFields = {
+  matchScore: z.number().min(0).max(100).optional(),
+  tailoredSummary: z.string().trim().max(10000).optional(),
+  rewrittenBullets: z.array(rewrittenBulletSchema).max(50).optional(),
+  atsPriorityFixes: z
+    .array(z.string().trim().min(1).max(500))
+    .max(30)
+    .optional(),
+  generatedCoverLetter: z.string().trim().max(20000).optional(),
+  analyzedAt: z.string().trim().optional(),
+};
+
 /**
  * Validates POST /api/applications request body.
  */
@@ -93,6 +106,7 @@ export const createApplicationSchema = z.object({
   status: applicationStatusSchema.optional(),
   notes: z.string().trim().max(5000).optional(),
   followUpDate: optionalFollowUpDate,
+  ...applicationAiMaterialsFields,
 });
 
 export type CreateApplicationBody = z.infer<typeof createApplicationSchema>;
@@ -125,6 +139,23 @@ export const updateApplicationSchema = z
         z.null(),
       ])
       .optional(),
+    matchScore: applicationAiMaterialsFields.matchScore,
+    tailoredSummary: z
+      .union([z.string().trim().max(10000), z.literal(""), z.null()])
+      .optional(),
+    rewrittenBullets: z
+      .union([z.array(rewrittenBulletSchema).max(50), z.null()])
+      .optional(),
+    atsPriorityFixes: z
+      .union([
+        z.array(z.string().trim().min(1).max(500)).max(30),
+        z.null(),
+      ])
+      .optional(),
+    generatedCoverLetter: z
+      .union([z.string().trim().max(20000), z.literal(""), z.null()])
+      .optional(),
+    analyzedAt: z.union([z.string().trim(), z.literal(""), z.null()]).optional(),
   })
   .refine((data) => Object.values(data).some((value) => value !== undefined), {
     message: "At least one field must be provided to update.",

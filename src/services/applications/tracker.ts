@@ -5,6 +5,7 @@ import {
   type Application,
   type ApplicationStatus,
 } from "@/types/application";
+import type { RewrittenBullet } from "@/types/resume-tailoring";
 
 /** MVP storage path — JSON file on disk (no database yet). */
 const DATA_FILE = path.join(process.cwd(), "data", "applications.json");
@@ -54,6 +55,15 @@ export async function getApplication(id: string): Promise<Application> {
   return application;
 }
 
+export type ApplicationAiMaterialsInput = {
+  matchScore?: number;
+  tailoredSummary?: string;
+  rewrittenBullets?: RewrittenBullet[];
+  atsPriorityFixes?: string[];
+  generatedCoverLetter?: string;
+  analyzedAt?: string;
+};
+
 export type CreateApplicationInput = {
   companyName: string;
   roleTitle: string;
@@ -61,7 +71,7 @@ export type CreateApplicationInput = {
   status?: ApplicationStatus;
   notes?: string;
   followUpDate?: string;
-};
+} & ApplicationAiMaterialsInput;
 
 export async function createApplication(
   input: CreateApplicationInput,
@@ -77,6 +87,16 @@ export async function createApplication(
     status: input.status ?? "saved",
     notes: input.notes,
     followUpDate: input.followUpDate,
+    matchScore: input.matchScore,
+    tailoredSummary: input.tailoredSummary,
+    rewrittenBullets: input.rewrittenBullets?.length
+      ? input.rewrittenBullets
+      : undefined,
+    atsPriorityFixes: input.atsPriorityFixes?.length
+      ? input.atsPriorityFixes
+      : undefined,
+    generatedCoverLetter: input.generatedCoverLetter,
+    analyzedAt: input.analyzedAt,
     createdAt: now,
     updatedAt: now,
   };
@@ -94,6 +114,12 @@ export type UpdateApplicationInput = {
   status?: ApplicationStatus;
   notes?: string | null;
   followUpDate?: string | null;
+  matchScore?: number | null;
+  tailoredSummary?: string | null;
+  rewrittenBullets?: RewrittenBullet[] | null;
+  atsPriorityFixes?: string[] | null;
+  generatedCoverLetter?: string | null;
+  analyzedAt?: string | null;
 };
 
 export async function updateApplication(
@@ -128,6 +154,34 @@ export async function updateApplication(
 
   if (input.followUpDate !== undefined) {
     updated.followUpDate = input.followUpDate || undefined;
+  }
+
+  if (input.matchScore !== undefined) {
+    updated.matchScore = input.matchScore ?? undefined;
+  }
+
+  if (input.tailoredSummary !== undefined) {
+    updated.tailoredSummary = input.tailoredSummary || undefined;
+  }
+
+  if (input.rewrittenBullets !== undefined) {
+    updated.rewrittenBullets = input.rewrittenBullets?.length
+      ? input.rewrittenBullets
+      : undefined;
+  }
+
+  if (input.atsPriorityFixes !== undefined) {
+    updated.atsPriorityFixes = input.atsPriorityFixes?.length
+      ? input.atsPriorityFixes
+      : undefined;
+  }
+
+  if (input.generatedCoverLetter !== undefined) {
+    updated.generatedCoverLetter = input.generatedCoverLetter || undefined;
+  }
+
+  if (input.analyzedAt !== undefined) {
+    updated.analyzedAt = input.analyzedAt || undefined;
   }
 
   applications[index] = updated;

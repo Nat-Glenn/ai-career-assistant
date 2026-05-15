@@ -128,18 +128,33 @@ export function JobPackageWorkflow({ jobId }: JobPackageWorkflowProps) {
     setError(null);
 
     try {
+      const payload: Record<string, unknown> = {
+        companyName: job.company,
+        roleTitle: job.title,
+        jobUrl: job.url,
+        status: "saved",
+        notes: applicationPackage
+          ? "Saved from application package workflow."
+          : undefined,
+      };
+
+      if (applicationPackage) {
+        payload.matchScore = applicationPackage.atsOptimization.matchScore;
+        payload.tailoredSummary =
+          applicationPackage.resumeTailoring.tailoredSummary;
+        payload.rewrittenBullets =
+          applicationPackage.resumeTailoring.rewrittenBullets;
+        payload.atsPriorityFixes =
+          applicationPackage.atsOptimization.priorityFixes;
+        payload.generatedCoverLetter =
+          applicationPackage.coverLetter.fullCoverLetter;
+        payload.analyzedAt = new Date().toISOString();
+      }
+
       const response = await fetch("/api/applications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyName: job.company,
-          roleTitle: job.title,
-          jobUrl: job.url,
-          status: "saved",
-          notes: applicationPackage
-            ? "Saved from application package workflow."
-            : undefined,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const json = (await response.json()) as ApiErrorBody;
@@ -149,7 +164,11 @@ export function JobPackageWorkflow({ jobId }: JobPackageWorkflowProps) {
         return;
       }
 
-      setSaveMessage("Saved to application tracker.");
+      setSaveMessage(
+        applicationPackage
+          ? "Saved to application tracker with AI materials."
+          : "Saved to application tracker.",
+      );
     } catch {
       setError("Could not save application. Check your connection.");
     } finally {

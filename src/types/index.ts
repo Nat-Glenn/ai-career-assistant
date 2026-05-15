@@ -9,6 +9,7 @@ export type { Application, ApplicationStatus } from "./application";
 export {
   applicationSchema,
   applicationStatusSchema,
+  applicationHasAiMaterials,
 } from "./application";
 export type { ResumeInput } from "./resume";
 export type { ApiError } from "./api";
