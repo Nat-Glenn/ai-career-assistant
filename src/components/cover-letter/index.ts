@@ -2,4 +2,5 @@
  * Cover letter UI (editor, tone selector).
  */
 
-export {};
+export { CoverLetterGenerateForm } from "./cover-letter-generate-form";
+export { CoverLetterGenerateResults } from "./cover-letter-generate-results";
