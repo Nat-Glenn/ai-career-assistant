@@ -8,6 +8,10 @@ import type { RemotePreference, UserProfile } from "@/types/profile";
 import { getProfile } from "@/services/profile";
 import { dedupeJobs, jobDedupeKey } from "./dedupe";
 import { expandSearchQueries } from "./query-expansion";
+import {
+  detectStrictSearchDomain,
+  passesStrictDomainSignals,
+} from "./domain-relevance";
 import { passesAnyIntentGate, isLikelyTechRoleQuery } from "./query-match";
 import {
   scoreDiscoveryRanking,
@@ -86,9 +90,14 @@ function filterJobs(
   intentQueries: string[],
 ): DiscoveredJob[] {
   const excludedKeywords = input.excludedKeywords ?? [];
+  const strictDomain = detectStrictSearchDomain(input.query);
 
   return jobs.filter((job) => {
     if (!passesAnyIntentGate(job, intentQueries)) {
+      return false;
+    }
+
+    if (!passesStrictDomainSignals(job, strictDomain)) {
       return false;
     }
 
@@ -200,13 +209,13 @@ function logDiscoveryDebug(payload: {
   mode: "manual" | "profile";
   query: string;
   expandedQueries: string[];
-  activeSources: string[];
+  selectedSources: string[];
   fetchedPerSource: Record<string, number>;
   afterFilter: number;
-  topRanked: { title: string; relevanceScore: number; source: string }[];
+  topTitles: string[];
 }) {
   console.log(
-    `[job-discovery] ${payload.mode} query=${JSON.stringify(payload.query)} expandedQueries=${JSON.stringify(payload.expandedQueries)} activeSources=${JSON.stringify(payload.activeSources)} fetchedPerSource=${JSON.stringify(payload.fetchedPerSource)} afterFilter=${payload.afterFilter} topRanked=${JSON.stringify(payload.topRanked)}`,
+    `[job-discovery] ${payload.mode} query=${JSON.stringify(payload.query)} expandedQueries=${JSON.stringify(payload.expandedQueries)} selectedSources=${JSON.stringify(payload.selectedSources)} fetchedPerSource=${JSON.stringify(payload.fetchedPerSource)} afterFilter=${payload.afterFilter} topTitles=${JSON.stringify(payload.topTitles)}`,
   );
 }
 
@@ -326,20 +335,27 @@ async function fetchExpandedJobsAggregated(
 ): Promise<{
   merged: DiscoveredJob[];
   aggregatedFetchedPerSource: Record<string, number>;
+  selectedSources: string[];
 }> {
   const variants = expandSearchQueries(input.query);
   const aggregatedFetchedPerSource: Record<string, number> = {};
+  const selectedSourcesAcc = new Set<string>();
   const merged: DiscoveredJob[] = [];
   const seenKeys = new Set<string>();
 
   for (const variant of variants) {
-    const { jobs, fetchedPerSource } = await fetchJobsForDiscovery(
-      {
-        query: variant,
-        location: input.location,
-      },
-      memo,
-    );
+    const { jobs, fetchedPerSource, selectedSources } =
+      await fetchJobsForDiscovery(
+        {
+          query: variant,
+          location: input.location,
+        },
+        memo,
+      );
+
+    for (const s of selectedSources) {
+      selectedSourcesAcc.add(s);
+    }
 
     for (const [source, count] of Object.entries(fetchedPerSource)) {
       aggregatedFetchedPerSource[source] =
@@ -356,7 +372,11 @@ async function fetchExpandedJobsAggregated(
     }
   }
 
-  return { merged, aggregatedFetchedPerSource };
+  return {
+    merged,
+    aggregatedFetchedPerSource,
+    selectedSources: Array.from(selectedSourcesAcc),
+  };
 }
 
 async function scoreAndRankJobs(
@@ -473,13 +493,15 @@ export async function listDiscoveredJobs(
 export async function discoverJobs(
   input: DiscoverJobsInput,
 ): Promise<DiscoveredJob[]> {
-  const activeSources = getActiveJobSources();
   const intents = expandSearchQueries(input.query);
 
   const memo: FetchDiscoveryMemo = {};
 
-  const { merged, aggregatedFetchedPerSource } =
-    await fetchExpandedJobsAggregated(input, memo);
+  const {
+    merged,
+    aggregatedFetchedPerSource,
+    selectedSources,
+  } = await fetchExpandedJobsAggregated(input, memo);
 
   const filtered = filterJobs(merged, input, intents);
 
@@ -499,14 +521,10 @@ export async function discoverJobs(
     mode: "manual",
     query: input.query,
     expandedQueries: intents,
-    activeSources,
+    selectedSources,
     fetchedPerSource: aggregatedFetchedPerSource,
     afterFilter: filtered.length,
-    topRanked: balanced.slice(0, 8).map((job) => ({
-      title: job.title,
-      relevanceScore: job.relevanceScore ?? 0,
-      source: job.source,
-    })),
+    topTitles: balanced.slice(0, 10).map((job) => job.title),
   });
 
   return persistDiscoveredJobs(balanced);
@@ -535,15 +553,22 @@ export async function discoverJobsFromProfile(): Promise<DiscoverJobsFromProfile
   }
 
   const queries = buildDiscoveryQueriesFromProfile(profile);
-  const activeSources = getActiveJobSources();
   const combined: DiscoveredJob[] = [];
   const memo: FetchDiscoveryMemo = {};
+  const profileSelectedSources = new Set<string>();
 
   for (const input of queries) {
     const intents = expandSearchQueries(input.query);
 
-    const { merged, aggregatedFetchedPerSource } =
-      await fetchExpandedJobsAggregated(input, memo);
+    const {
+      merged,
+      aggregatedFetchedPerSource,
+      selectedSources,
+    } = await fetchExpandedJobsAggregated(input, memo);
+
+    for (const s of selectedSources) {
+      profileSelectedSources.add(s);
+    }
 
     const filtered = filterJobs(merged, input, intents);
 
@@ -563,14 +588,10 @@ export async function discoverJobsFromProfile(): Promise<DiscoverJobsFromProfile
       mode: "profile",
       query: input.query,
       expandedQueries: intents,
-      activeSources,
+      selectedSources,
       fetchedPerSource: aggregatedFetchedPerSource,
       afterFilter: filtered.length,
-      topRanked: balanced.slice(0, 8).map((job) => ({
-        title: job.title,
-        relevanceScore: job.relevanceScore ?? 0,
-        source: job.source,
-      })),
+      topTitles: balanced.slice(0, 10).map((job) => job.title),
     });
 
     combined.push(...balanced);
@@ -581,13 +602,18 @@ export async function discoverJobsFromProfile(): Promise<DiscoverJobsFromProfile
 
   const jobs = await persistDiscoveredJobs(deduped);
 
+  const sourcesMeta =
+    profileSelectedSources.size > 0
+      ? Array.from(profileSelectedSources)
+      : getActiveJobSources();
+
   return {
     jobs,
     meta: {
       count: jobs.length,
       queriesRun: queries.length,
       roles: profile.targetRoles,
-      sources: getActiveJobSources(),
+      sources: sourcesMeta,
     },
   };
 }

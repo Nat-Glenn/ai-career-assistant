@@ -47,7 +47,15 @@ function isProfileReadyForDiscovery(profile: UserProfile): boolean {
 }
 
 export function JobDiscoveryTracker() {
-  const [jobs, setJobs] = useState<DiscoveredJob[]>([]);
+  const [libraryJobs, setLibraryJobs] = useState<DiscoveredJob[]>([]);
+  const [manualResults, setManualResults] = useState<DiscoveredJob[] | null>(
+    null,
+  );
+  const [manualQueryKey, setManualQueryKey] = useState("");
+  const [profileResults, setProfileResults] = useState<DiscoveredJob[] | null>(
+    null,
+  );
+
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
   /** Default off: many fields (e.g. healthcare) are mostly onsite; profile can set true for remote preference. */
@@ -55,7 +63,7 @@ export function JobDiscoveryTracker() {
   const [keywords, setKeywords] = useState("");
   const [profileReady, setProfileReady] = useState(false);
   const [profileRoles, setProfileRoles] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingLibrary, setIsLoadingLibrary] = useState(true);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [isDiscoveringFromProfile, setIsDiscoveringFromProfile] = useState(false);
@@ -67,31 +75,12 @@ export function JobDiscoveryTracker() {
     "manual" | "profile" | null
   >(null);
 
-  const loadJobs = useCallback(async () => {
-    setIsLoading(true);
+  const loadLibrary = useCallback(async () => {
+    setIsLoadingLibrary(true);
     setError(null);
 
     try {
-      const params = new URLSearchParams();
-
-      if (query.trim()) {
-        params.set("query", query.trim());
-      }
-
-      if (location.trim()) {
-        params.set("location", location.trim());
-      }
-
-      params.set("remoteOnly", String(remoteOnly));
-
-      const kw = parseKeywords(keywords);
-
-      if (kw?.length) {
-        params.set("keywords", kw.join(","));
-      }
-
-      const qs = params.toString();
-      const response = await fetch(qs ? `/api/jobs?${qs}` : "/api/jobs");
+      const response = await fetch("/api/jobs");
       const json = (await response.json()) as ApiJobsBody & ApiErrorBody;
 
       if (!response.ok) {
@@ -99,15 +88,15 @@ export function JobDiscoveryTracker() {
         return;
       }
 
-      setJobs(json.data);
+      setLibraryJobs(json.data);
     } catch {
       setError(
         "Could not reach the server. Check that npm run dev is running.",
       );
     } finally {
-      setIsLoading(false);
+      setIsLoadingLibrary(false);
     }
-  }, [query, location, remoteOnly, keywords]);
+  }, []);
 
   const loadProfile = useCallback(async () => {
     setIsLoadingProfile(true);
@@ -130,12 +119,7 @@ export function JobDiscoveryTracker() {
         setQuery(profile.targetRoles[0] ?? "");
         setLocation(listToString(profile.targetLocations));
         setRemoteOnly(profile.remotePreference === "remote");
-        setKeywords(
-          listToString([
-            ...profile.coreSkills,
-            ...profile.preferredKeywords,
-          ]),
-        );
+        // Do not prefill keywords from profile — manual search must stay independent of profile skills.
       }
     } catch {
       // Profile hints are optional; manual search still works.
@@ -145,13 +129,23 @@ export function JobDiscoveryTracker() {
   }, []);
 
   useEffect(() => {
+    void loadLibrary();
+  }, [loadLibrary]);
+
+  useEffect(() => {
     void loadProfile();
   }, [loadProfile]);
 
   useEffect(() => {
-    const id = window.setTimeout(() => void loadJobs(), 400);
-    return () => window.clearTimeout(id);
-  }, [loadJobs]);
+    if (!manualQueryKey) {
+      return;
+    }
+
+    if (query.trim() !== manualQueryKey) {
+      setManualResults(null);
+      setManualQueryKey("");
+    }
+  }, [query, manualQueryKey]);
 
   async function handleDiscoverFromProfile() {
     setIsDiscoveringFromProfile(true);
@@ -181,9 +175,13 @@ export function JobDiscoveryTracker() {
         return;
       }
 
+      setProfileResults(json.data);
+      setManualResults(null);
+      setManualQueryKey("");
+
       setLastDiscoverCount(json.meta?.count ?? json.data.length);
       setLastDiscoverSource("profile");
-      setJobs(json.data);
+      await loadLibrary();
     } catch {
       setError(
         "Could not discover jobs from profile. Check your connection and try again.",
@@ -200,8 +198,10 @@ export function JobDiscoveryTracker() {
     setLastDiscoverCount(null);
     setLastDiscoverSource(null);
 
+    const trimmedQuery = query.trim();
+
     const payload: Record<string, unknown> = {
-      query: query.trim(),
+      query: trimmedQuery,
       remoteOnly,
     };
 
@@ -229,9 +229,13 @@ export function JobDiscoveryTracker() {
         return;
       }
 
+      setManualResults(json.data);
+      setManualQueryKey(trimmedQuery);
+      setProfileResults(null);
+
       setLastDiscoverCount(json.meta?.count ?? json.data.length);
       setLastDiscoverSource("manual");
-      await loadJobs();
+      await loadLibrary();
     } catch {
       setError("Could not discover jobs. Check your connection and try again.");
     } finally {
@@ -240,6 +244,13 @@ export function JobDiscoveryTracker() {
   }
 
   const isBusy = isDiscovering || isDiscoveringFromProfile;
+
+  const showManualSection =
+    manualResults !== null &&
+    manualQueryKey.length > 0 &&
+    manualQueryKey === query.trim();
+
+  const trimmedQuery = query.trim();
 
   return (
     <div className="space-y-8">
@@ -312,36 +323,106 @@ export function JobDiscoveryTracker() {
         <p className="rounded-xl border border-card-border bg-card px-4 py-3 text-sm text-muted">
           {lastDiscoverSource === "profile"
             ? `Found ${lastDiscoverCount} job${lastDiscoverCount === 1 ? "" : "s"} from your profile preferences`
-            : `Found ${lastDiscoverCount} matching job${lastDiscoverCount === 1 ? "" : "s"} from this search`}
+            : `Found ${lastDiscoverCount} matching job${lastDiscoverCount === 1 ? "" : "s"} from this manual search`}
           {" "}
-          (saved to your list below).
+          (merged into all saved jobs below).
         </p>
       )}
 
-      <section>
-        <h2 className="mb-4 text-sm font-medium uppercase tracking-wider text-muted">
-          Discovered jobs
+      <section className="space-y-4">
+        <h2 className="text-sm font-medium uppercase tracking-wider text-muted">
+          Current manual search results
         </h2>
+        <p className="text-xs text-muted">
+          Only jobs returned by your latest manual Discover run for the query
+          shown in the form. Changing the query clears this list. This is not a
+          filter over your entire saved library.
+        </p>
 
-        {isLoading && (
+        {trimmedQuery.length === 0 && (
+          <p className="rounded-xl border border-card-border bg-card px-4 py-3 text-sm text-muted">
+            Enter a search query, then run Discover jobs.
+          </p>
+        )}
+
+        {trimmedQuery.length > 0 && !showManualSection && (
+          <p className="rounded-xl border border-card-border bg-card px-4 py-3 text-sm text-muted">
+            Run <span className="text-foreground">Discover jobs</span> to load
+            results for &quot;{trimmedQuery}&quot;. Saved jobs from older
+            searches are listed separately below and are not mixed in here.
+          </p>
+        )}
+
+        {showManualSection && manualResults!.length === 0 && (
+          <p className="rounded-xl border border-card-border bg-card px-4 py-3 text-sm text-muted">
+            No jobs passed relevance filters for this search. Try broader
+            wording, turn off Remote only, or configure Adzuna for non-tech
+            roles (see .env.example).
+          </p>
+        )}
+
+        {showManualSection && manualResults!.length > 0 && (
+          <ul className="space-y-4">
+            {manualResults!.map((job) => (
+              <li key={job.id}>
+                <JobCard job={job} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {profileResults !== null && (
+        <section className="space-y-4">
+          <h2 className="text-sm font-medium uppercase tracking-wider text-muted">
+            Latest profile discovery
+          </h2>
+          <p className="text-xs text-muted">
+            Jobs returned from the most recent &quot;Discover from profile&quot;
+            run (also saved to your library below).
+          </p>
+          {profileResults.length === 0 ? (
+            <p className="rounded-xl border border-card-border bg-card px-4 py-3 text-sm text-muted">
+              No jobs from the last profile run.
+            </p>
+          ) : (
+            <ul className="space-y-4">
+              {profileResults.map((job) => (
+                <li key={job.id}>
+                  <JobCard job={job} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      <section>
+        <h2 className="mb-2 text-sm font-medium uppercase tracking-wider text-muted">
+          All saved jobs
+        </h2>
+        <p className="mb-4 text-xs text-muted">
+          Everything stored in your local job library (newest first). This
+          includes past manual and profile runs.
+        </p>
+
+        {isLoadingLibrary && (
           <p className="rounded-xl border border-card-border bg-card px-4 py-3 text-sm text-muted">
             Loading saved jobs…
           </p>
         )}
 
-        {!isLoading && jobs.length === 0 && (
+        {!isLoadingLibrary && libraryJobs.length === 0 && (
           <p className="rounded-xl border border-card-border bg-card px-4 py-3 text-sm text-muted">
-            {query.trim()
-              ? "No saved jobs match this search yet. Run Discover jobs, or try turning off Remote only. For nursing and many non-tech roles, configure Adzuna (see .env.example)."
-              : profileReady
-                ? "No jobs saved yet. Use Discover from profile above, or run a manual search."
-                : "No jobs saved yet. Set up your career preferences, then use Discover from profile."}
+            {profileReady
+              ? "No jobs saved yet. Use Discover from profile above, or run a manual search."
+              : "No jobs saved yet. Set up your career preferences, then use Discover from profile, or search manually."}
           </p>
         )}
 
-        {!isLoading && jobs.length > 0 && (
+        {!isLoadingLibrary && libraryJobs.length > 0 && (
           <ul className="space-y-4">
-            {jobs.map((job) => (
+            {libraryJobs.map((job) => (
               <li key={job.id}>
                 <JobCard job={job} />
               </li>

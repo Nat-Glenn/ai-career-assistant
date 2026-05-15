@@ -15,9 +15,11 @@ export type FetchDiscoverySourcesResult = {
   jobs: DiscoveredJob[];
   /** Count of raw rows returned per source before merge/dedupe */
   fetchedPerSource: Record<string, number>;
+  /** Sources actually queried for this variant (RemoteOK omitted for non-tech). */
+  selectedSources: string[];
 };
 
-/** Sources that are configured and may be used in a discovery run. */
+/** Sources that may be configured for the app (not necessarily used for a given query). */
 export function getActiveJobSources(): string[] {
   const sources = ["remoteok"];
 
@@ -78,8 +80,10 @@ export type FetchDiscoveryMemo = {
 };
 
 /**
- * Chooses sources by query shape: non-tech queries prefer Adzuna (broader industries)
- * and skip RemoteOK bulk when Adzuna is configured so tech-heavy feeds do not dominate.
+ * Source selection:
+ * - Tech / cloud / software: RemoteOK + Adzuna (when configured).
+ * - Non-tech: Adzuna only. RemoteOK is never used (tech-heavy remote feed).
+ *   If Adzuna is not configured, returns an empty job list.
  */
 export async function fetchJobsForDiscovery(
   options: JobSourceFetchOptions,
@@ -101,10 +105,13 @@ export async function fetchJobsForDiscovery(
 
   fetchedPerSource.adzuna = adzunaResults.length;
 
-  if (!tech && adzunaOn && adzunaResults.length > 0) {
+  if (!tech) {
+    const selectedSources = adzunaOn ? ["adzuna"] : [];
+
     return {
       jobs: adzunaResults,
       fetchedPerSource,
+      selectedSources,
     };
   }
 
@@ -120,16 +127,13 @@ export async function fetchJobsForDiscovery(
 
   fetchedPerSource.remoteok = remoteOkResults.length;
 
-  if (!tech && adzunaOn && adzunaResults.length === 0) {
-    return {
-      jobs: remoteOkResults,
-      fetchedPerSource,
-    };
-  }
+  const selectedSources =
+    adzunaOn ? (["remoteok", "adzuna"] as const) : (["remoteok"] as const);
 
   return {
     jobs: [...remoteOkResults, ...adzunaResults],
     fetchedPerSource,
+    selectedSources: [...selectedSources],
   };
 }
 
