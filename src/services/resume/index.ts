@@ -2,4 +2,4 @@
  * Resume tailoring and ATS optimization.
  */
 
-export {};
+export { tailorResume } from "./tailor";

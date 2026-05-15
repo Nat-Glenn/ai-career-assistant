@@ -8,3 +8,8 @@ export type { ResumeInput } from "./resume";
 export type { ApiError } from "./api";
 export type { JobAnalysisResult } from "./job-analysis";
 export { jobAnalysisResultSchema } from "./job-analysis";
+export type {
+  ResumeTailoringResult,
+  RewrittenBullet,
+} from "./resume-tailoring";
+export { resumeTailoringResultSchema } from "./resume-tailoring";

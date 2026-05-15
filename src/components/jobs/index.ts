@@ -1,5 +1,6 @@
 /**
- * Job discovery UI (job cards, filters, detail panels).
+ * Job discovery and analysis UI.
  */
 
-export {};
+export { JobAnalysisForm } from "./job-analysis-form";
+export { JobAnalysisResults } from "./job-analysis-results";
