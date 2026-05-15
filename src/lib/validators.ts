@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { applicationStatusSchema } from "@/types/application";
 import { coverLetterToneSchema } from "@/types/cover-letter";
 
 /**
@@ -63,3 +64,66 @@ export const generateCoverLetterSchema = z.object({
 });
 
 export type GenerateCoverLetterInput = z.infer<typeof generateCoverLetterSchema>;
+
+const optionalUrl = z
+  .string()
+  .trim()
+  .url("Job URL must be a valid URL.")
+  .optional()
+  .or(z.literal("").transform(() => undefined));
+
+const optionalFollowUpDate = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Follow-up date must be YYYY-MM-DD.")
+  .optional()
+  .or(z.literal("").transform(() => undefined));
+
+/**
+ * Validates POST /api/applications request body.
+ */
+export const createApplicationSchema = z.object({
+  companyName: z.string().trim().min(1, "Company name is required.").max(200),
+  roleTitle: z.string().trim().min(1, "Role title is required.").max(200),
+  jobUrl: optionalUrl,
+  status: applicationStatusSchema.optional(),
+  notes: z.string().trim().max(5000).optional(),
+  followUpDate: optionalFollowUpDate,
+});
+
+export type CreateApplicationBody = z.infer<typeof createApplicationSchema>;
+
+/**
+ * Validates PATCH /api/applications/[id] request body.
+ */
+export const updateApplicationSchema = z
+  .object({
+    companyName: z.string().trim().min(1).max(200).optional(),
+    roleTitle: z.string().trim().min(1).max(200).optional(),
+    jobUrl: z
+      .union([
+        z.string().trim().url("Job URL must be a valid URL."),
+        z.literal(""),
+        z.null(),
+      ])
+      .optional(),
+    status: applicationStatusSchema.optional(),
+    notes: z
+      .union([z.string().trim().max(5000), z.literal(""), z.null()])
+      .optional(),
+    followUpDate: z
+      .union([
+        z
+          .string()
+          .trim()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, "Follow-up date must be YYYY-MM-DD."),
+        z.literal(""),
+        z.null(),
+      ])
+      .optional(),
+  })
+  .refine((data) => Object.values(data).some((value) => value !== undefined), {
+    message: "At least one field must be provided to update.",
+  });
+
+export type UpdateApplicationBody = z.infer<typeof updateApplicationSchema>;

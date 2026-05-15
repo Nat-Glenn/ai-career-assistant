@@ -3,7 +3,11 @@
  */
 
 export type { Job } from "./job";
-export type { Application } from "./application";
+export type { Application, ApplicationStatus } from "./application";
+export {
+  applicationSchema,
+  applicationStatusSchema,
+} from "./application";
 export type { ResumeInput } from "./resume";
 export type { ApiError } from "./api";
 export type { JobAnalysisResult } from "./job-analysis";
