@@ -1,21 +1,90 @@
+"use client";
+
+import { useCallback, useState } from "react";
 import type { ApplicationPackage } from "@/types/application-package";
 
 type JobPackageResultsProps = {
   package: ApplicationPackage;
 };
 
+type CopyButtonProps = {
+  text: string;
+  label: string;
+};
+
+const copyButtonClassName =
+  "shrink-0 rounded-lg border border-card-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-zinc-600 disabled:cursor-not-allowed disabled:opacity-50";
+
+function formatRewrittenBullets(
+  bullets: ApplicationPackage["resumeTailoring"]["rewrittenBullets"],
+): string {
+  return bullets
+    .map((bullet, index) => {
+      return `${index + 1}. ${bullet.rewritten}\n   (was: ${bullet.original})`;
+    })
+    .join("\n\n");
+}
+
+function formatBulletList(items: string[]): string {
+  return items.map((item) => `• ${item}`).join("\n");
+}
+
+function formatCoverLetter(
+  coverLetter: ApplicationPackage["coverLetter"],
+): string {
+  return `Subject: ${coverLetter.subjectLine}\n\n${coverLetter.fullCoverLetter}`;
+}
+
+function CopyButton({ text, label }: CopyButtonProps) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    if (!text.trim()) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }, [text]);
+
+  return (
+    <button
+      type="button"
+      onClick={() => void handleCopy()}
+      disabled={!text.trim()}
+      className={copyButtonClassName}
+    >
+      {copied ? "Copied!" : `Copy ${label}`}
+    </button>
+  );
+}
+
 function Section({
   title,
+  copyText,
+  copyLabel,
   children,
 }: {
   title: string;
+  copyText?: string;
+  copyLabel?: string;
   children: React.ReactNode;
 }) {
   return (
     <section className="rounded-xl border border-card-border bg-card p-5">
-      <h3 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted">
-        {title}
-      </h3>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-sm font-medium uppercase tracking-wider text-muted">
+          {title}
+        </h3>
+        {copyText && copyLabel && (
+          <CopyButton text={copyText} label={copyLabel} />
+        )}
+      </div>
       {children}
     </section>
   );
@@ -51,8 +120,20 @@ function BulletList({ items }: { items: string[] }) {
 }
 
 export function JobPackageResults({ package: pkg }: JobPackageResultsProps) {
+  const tailoredSummary = pkg.resumeTailoring.tailoredSummary;
+  const rewrittenBulletsText = formatRewrittenBullets(
+    pkg.resumeTailoring.rewrittenBullets,
+  );
+  const priorityFixesText = formatBulletList(pkg.atsOptimization.priorityFixes);
+  const coverLetterText = formatCoverLetter(pkg.coverLetter);
+
   return (
     <div className="space-y-4">
+      <p className="text-xs text-muted">
+        Review each section below. Use copy to paste into your resume editor or
+        email — you can edit the text after copying.
+      </p>
+
       <Section title="Job analysis">
         <p className="mb-3 text-sm leading-relaxed">{pkg.analysis.summary}</p>
         <p className="mb-2 text-xs font-medium uppercase text-muted">
@@ -65,7 +146,11 @@ export function JobPackageResults({ package: pkg }: JobPackageResultsProps) {
         <TagList items={pkg.analysis.atsKeywords} />
       </Section>
 
-      <Section title="ATS optimization">
+      <Section
+        title="ATS optimization"
+        copyText={priorityFixesText}
+        copyLabel="priority fixes"
+      >
         <p className="mb-2 text-2xl font-semibold text-accent">
           Match score: {pkg.atsOptimization.matchScore}
         </p>
@@ -79,13 +164,22 @@ export function JobPackageResults({ package: pkg }: JobPackageResultsProps) {
         <BulletList items={pkg.atsOptimization.priorityFixes} />
       </Section>
 
-      <Section title="Resume tailoring">
-        <p className="mb-3 text-sm leading-relaxed">
-          {pkg.resumeTailoring.tailoredSummary}
-        </p>
-        <p className="mb-2 text-xs font-medium uppercase text-muted">
-          Rewritten bullets
-        </p>
+      <Section
+        title="Resume tailoring"
+        copyText={tailoredSummary}
+        copyLabel="tailored summary"
+      >
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <p className="flex-1 text-sm leading-relaxed">
+            {tailoredSummary}
+          </p>
+        </div>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs font-medium uppercase text-muted">
+            Rewritten bullets
+          </p>
+          <CopyButton text={rewrittenBulletsText} label="rewritten bullets" />
+        </div>
         <ul className="space-y-3">
           {pkg.resumeTailoring.rewrittenBullets.map((bullet, index) => (
             <li
@@ -99,7 +193,11 @@ export function JobPackageResults({ package: pkg }: JobPackageResultsProps) {
         </ul>
       </Section>
 
-      <Section title="Cover letter">
+      <Section
+        title="Cover letter"
+        copyText={coverLetterText}
+        copyLabel="cover letter"
+      >
         <p className="mb-2 text-sm font-medium">{pkg.coverLetter.subjectLine}</p>
         <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
           {pkg.coverLetter.fullCoverLetter}
