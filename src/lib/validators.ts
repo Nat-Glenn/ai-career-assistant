@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { coverLetterToneSchema } from "@/types/cover-letter";
 
 /**
  * Validates POST /api/jobs/analyze request body.
@@ -41,3 +42,24 @@ export type TailorResumeInput = z.infer<typeof tailorResumeSchema>;
 export const atsOptimizeSchema = tailorResumeSchema;
 
 export type AtsOptimizeInput = z.infer<typeof atsOptimizeSchema>;
+
+/**
+ * Validates POST /api/cover-letter/generate request body.
+ */
+export const generateCoverLetterSchema = z.object({
+  resumeText: z
+    .string()
+    .trim()
+    .min(100, "Resume must be at least 100 characters.")
+    .max(20000, "Resume must be at most 20,000 characters."),
+  jobDescription: z
+    .string()
+    .trim()
+    .min(50, "Job description must be at least 50 characters.")
+    .max(15000, "Job description must be at most 15,000 characters."),
+  companyName: z.string().trim().min(1).max(200).optional(),
+  roleTitle: z.string().trim().min(1).max(200).optional(),
+  tone: coverLetterToneSchema.optional(),
+});
+
+export type GenerateCoverLetterInput = z.infer<typeof generateCoverLetterSchema>;

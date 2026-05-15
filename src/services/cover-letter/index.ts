@@ -2,4 +2,4 @@
  * Cover letter generation.
  */
 
-export {};
+export { generateCoverLetter } from "./generate";

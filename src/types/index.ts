@@ -15,3 +15,8 @@ export type {
 export { resumeTailoringResultSchema } from "./resume-tailoring";
 export type { AtsOptimizationResult } from "./ats-optimization";
 export { atsOptimizationResultSchema } from "./ats-optimization";
+export type { CoverLetterResult, CoverLetterTone } from "./cover-letter";
+export {
+  coverLetterResultSchema,
+  coverLetterToneSchema,
+} from "./cover-letter";
