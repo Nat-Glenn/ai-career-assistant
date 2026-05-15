@@ -6,3 +6,5 @@ export type { Job } from "./job";
 export type { Application } from "./application";
 export type { ResumeInput } from "./resume";
 export type { ApiError } from "./api";
+export type { JobAnalysisResult } from "./job-analysis";
+export { jobAnalysisResultSchema } from "./job-analysis";
