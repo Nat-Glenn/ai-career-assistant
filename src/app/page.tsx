@@ -6,7 +6,6 @@ const features = [
     description:
       "Aggregate relevant openings from publicly accessible job boards and ATS listings, then filter by your preferences.",
     href: "/jobs",
-    status: "Coming soon",
   },
   {
     title: "Job Analysis",

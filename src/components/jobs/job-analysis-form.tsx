@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { JobAnalysisResult } from "@/types/job-analysis";
+import { PENDING_DESCRIPTION_KEY } from "./job-card";
 import { JobAnalysisResults } from "./job-analysis-results";
 
 type ApiErrorBody = {
@@ -20,6 +21,15 @@ export function JobAnalysisForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<JobAnalysisResult | null>(null);
+
+  useEffect(() => {
+    const pending = sessionStorage.getItem(PENDING_DESCRIPTION_KEY);
+
+    if (pending) {
+      setJobDescription(pending);
+      sessionStorage.removeItem(PENDING_DESCRIPTION_KEY);
+    }
+  }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
