@@ -5,21 +5,38 @@ const features = [
     title: "Job Discovery",
     description:
       "Aggregate relevant openings from publicly accessible job boards and ATS listings, then filter by your preferences.",
+    href: "/jobs",
+    status: "Coming soon",
+  },
+  {
+    title: "Job Analysis",
+    description:
+      "Extract skills, responsibilities, experience level, and ATS keywords from any job posting.",
+    href: "/jobs/analyze",
   },
   {
     title: "Resume Tailoring",
     description:
       "Align your resume with a specific role by improving bullet points, emphasis, and keyword relevance.",
+    href: "/resume/tailor",
   },
   {
     title: "ATS Optimization",
     description:
       "Identify missing keywords and phrasing gaps so your resume performs better in applicant tracking systems.",
+    href: "/resume/ats-optimize",
   },
   {
     title: "Cover Letter Generation",
     description:
       "Draft personalized cover letters you can review and edit before sending with each application.",
+    href: "/cover-letter/generate",
+  },
+  {
+    title: "Application Tracking",
+    description:
+      "Track companies, roles, status, follow-up dates, and notes for every application in one place.",
+    href: "/applications",
   },
 ] as const;
 
@@ -53,12 +70,14 @@ export default function Home() {
           <h2 className="mb-6 text-sm font-medium uppercase tracking-wider text-muted">
             Platform features
           </h2>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {features.map((feature) => (
               <FeatureCard
                 key={feature.title}
                 title={feature.title}
                 description={feature.description}
+                href={feature.href}
+                status={"status" in feature ? feature.status : undefined}
               />
             ))}
           </div>
