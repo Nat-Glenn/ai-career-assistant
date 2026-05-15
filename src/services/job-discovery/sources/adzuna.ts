@@ -29,6 +29,8 @@ type AdzunaRawJob = {
   company?: { display_name?: string };
   location?: { display_name?: string; area?: string[] };
   category?: { label?: string };
+  /** Listing creation time when returned by API (often ISO-like string). */
+  created?: string;
 };
 
 type AdzunaSearchResponse = {
@@ -83,6 +85,16 @@ function mapToDiscoveredJob(row: AdzunaRawJob): DiscoveredJob | null {
   const description = row.description ? stripHtml(row.description) : undefined;
   const tags = row.category?.label ? [row.category.label] : undefined;
 
+  let postedAt: string | undefined;
+
+  if (row.created?.trim()) {
+    const parsed = Date.parse(row.created);
+
+    if (!Number.isNaN(parsed)) {
+      postedAt = new Date(parsed).toISOString();
+    }
+  }
+
   return {
     id: `adzuna-${row.id}`,
     title: row.title.trim(),
@@ -93,6 +105,7 @@ function mapToDiscoveredJob(row: AdzunaRawJob): DiscoveredJob | null {
     url: row.redirect_url,
     description,
     tags,
+    postedAt,
     discoveredAt: new Date().toISOString(),
   };
 }

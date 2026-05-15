@@ -4,15 +4,48 @@ import {
   discoverJobs,
   getActiveJobSources,
   listDiscoveredJobs,
+  type DiscoverJobsInput,
 } from "@/services/job-discovery";
+
+function parseKeywordsParam(value: string | null): string[] | undefined {
+  if (!value?.trim()) {
+    return undefined;
+  }
+
+  const list = value
+    .split(",")
+    .map((k) => k.trim())
+    .filter(Boolean);
+
+  return list.length > 0 ? list : undefined;
+}
 
 /**
  * GET /api/jobs — list discovered jobs from data/jobs.json
+ * Optional query params (match manual discovery): query, location, remoteOnly, keywords (comma-separated).
+ * When `query` is set, results are filtered and re-ranked for that search.
  * POST /api/jobs — trigger job discovery from public sources
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const data = await listDiscoveredJobs();
+    const url = new URL(request.url);
+    const query = url.searchParams.get("query")?.trim();
+    const location = url.searchParams.get("location")?.trim();
+    const remoteOnlyParam = url.searchParams.get("remoteOnly");
+    const keywords = parseKeywordsParam(url.searchParams.get("keywords"));
+
+    const hasScope = Boolean(query);
+
+    const filters: DiscoverJobsInput | null = hasScope
+      ? {
+          query: query!,
+          location: location || undefined,
+          remoteOnly: remoteOnlyParam === "true",
+          keywords,
+        }
+      : null;
+
+    const data = await listDiscoveredJobs(filters);
 
     return NextResponse.json({ data });
   } catch (error) {

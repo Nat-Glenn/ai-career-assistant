@@ -50,7 +50,8 @@ export function JobDiscoveryTracker() {
   const [jobs, setJobs] = useState<DiscoveredJob[]>([]);
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
-  const [remoteOnly, setRemoteOnly] = useState(true);
+  /** Default off: many fields (e.g. healthcare) are mostly onsite; profile can set true for remote preference. */
+  const [remoteOnly, setRemoteOnly] = useState(false);
   const [keywords, setKeywords] = useState("");
   const [profileReady, setProfileReady] = useState(false);
   const [profileRoles, setProfileRoles] = useState<string[]>([]);
@@ -71,7 +72,26 @@ export function JobDiscoveryTracker() {
     setError(null);
 
     try {
-      const response = await fetch("/api/jobs");
+      const params = new URLSearchParams();
+
+      if (query.trim()) {
+        params.set("query", query.trim());
+      }
+
+      if (location.trim()) {
+        params.set("location", location.trim());
+      }
+
+      params.set("remoteOnly", String(remoteOnly));
+
+      const kw = parseKeywords(keywords);
+
+      if (kw?.length) {
+        params.set("keywords", kw.join(","));
+      }
+
+      const qs = params.toString();
+      const response = await fetch(qs ? `/api/jobs?${qs}` : "/api/jobs");
       const json = (await response.json()) as ApiJobsBody & ApiErrorBody;
 
       if (!response.ok) {
@@ -87,7 +107,7 @@ export function JobDiscoveryTracker() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [query, location, remoteOnly, keywords]);
 
   const loadProfile = useCallback(async () => {
     setIsLoadingProfile(true);
@@ -125,9 +145,13 @@ export function JobDiscoveryTracker() {
   }, []);
 
   useEffect(() => {
-    void loadJobs();
     void loadProfile();
-  }, [loadJobs, loadProfile]);
+  }, [loadProfile]);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => void loadJobs(), 400);
+    return () => window.clearTimeout(id);
+  }, [loadJobs]);
 
   async function handleDiscoverFromProfile() {
     setIsDiscoveringFromProfile(true);
@@ -159,7 +183,7 @@ export function JobDiscoveryTracker() {
 
       setLastDiscoverCount(json.meta?.count ?? json.data.length);
       setLastDiscoverSource("profile");
-      await loadJobs();
+      setJobs(json.data);
     } catch {
       setError(
         "Could not discover jobs from profile. Check your connection and try again.",
@@ -307,9 +331,11 @@ export function JobDiscoveryTracker() {
 
         {!isLoading && jobs.length === 0 && (
           <p className="rounded-xl border border-card-border bg-card px-4 py-3 text-sm text-muted">
-            {profileReady
-              ? "No jobs saved yet. Use Discover from profile above, or run a manual search."
-              : "No jobs saved yet. Set up your career preferences, then use Discover from profile."}
+            {query.trim()
+              ? "No saved jobs match this search yet. Run Discover jobs, or try turning off Remote only. For nursing and many non-tech roles, configure Adzuna (see .env.example)."
+              : profileReady
+                ? "No jobs saved yet. Use Discover from profile above, or run a manual search."
+                : "No jobs saved yet. Set up your career preferences, then use Discover from profile."}
           </p>
         )}
 

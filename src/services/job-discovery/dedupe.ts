@@ -30,8 +30,23 @@ export function dedupeJobs(jobs: DiscoveredJob[]): DiscoveredJob[] {
     const existingScore = existing.relevanceScore ?? 0;
     const jobScore = job.relevanceScore ?? 0;
 
-    if (jobScore >= existingScore) {
+    if (jobScore > existingScore) {
       byKey.set(key, job);
+      continue;
+    }
+
+    if (jobScore === existingScore) {
+      const existingPosted = existing.postedAt
+        ? Date.parse(existing.postedAt)
+        : Number.NEGATIVE_INFINITY;
+      const jobPosted = job.postedAt ? Date.parse(job.postedAt) : Number.NEGATIVE_INFINITY;
+
+      if (
+        Number.isFinite(jobPosted) &&
+        jobPosted > existingPosted
+      ) {
+        byKey.set(key, job);
+      }
     }
   }
 

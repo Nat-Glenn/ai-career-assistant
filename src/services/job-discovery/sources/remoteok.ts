@@ -24,6 +24,7 @@ type RemoteOkRawJob = {
   description?: string;
   tags?: string[];
   url?: string;
+  /** Unix timestamp (seconds) when listing was posted */
   epoch?: number;
 };
 
@@ -70,6 +71,14 @@ function mapToDiscoveredJob(row: RemoteOkRawJob): DiscoveredJob | null {
 
   const description = row.description ? stripHtml(row.description) : undefined;
 
+  let postedAt: string | undefined;
+
+  if (typeof row.epoch === "number" && Number.isFinite(row.epoch)) {
+    const ms =
+      row.epoch > 10_000_000_000 ? row.epoch : row.epoch * 1000;
+    postedAt = new Date(ms).toISOString();
+  }
+
   return {
     id: `remoteok-${row.id}`,
     title: row.position!.trim(),
@@ -82,6 +91,7 @@ function mapToDiscoveredJob(row: RemoteOkRawJob): DiscoveredJob | null {
     tags: Array.isArray(row.tags)
       ? row.tags.filter((tag): tag is string => typeof tag === "string")
       : undefined,
+    postedAt,
     discoveredAt: new Date().toISOString(),
   };
 }

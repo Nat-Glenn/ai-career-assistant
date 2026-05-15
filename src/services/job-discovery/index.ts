@@ -6,13 +6,17 @@ import {
 } from "@/types/job";
 import type { RemotePreference, UserProfile } from "@/types/profile";
 import { getProfile } from "@/services/profile";
-import { dedupeJobs } from "./dedupe";
-import { scoreJob, type ScoringPreferences } from "./scoring";
+import { dedupeJobs, jobDedupeKey } from "./dedupe";
+import { expandSearchQueries } from "./query-expansion";
+import { passesAnyIntentGate, isLikelyTechRoleQuery } from "./query-match";
 import {
-  fetchAllJobSources,
-  fetchBulkJobSources,
-  fetchSearchJobSources,
+  scoreDiscoveryRanking,
+  type ScoringPreferences,
+} from "./scoring";
+import {
+  fetchJobsForDiscovery,
   getActiveJobSources,
+  type FetchDiscoveryMemo,
 } from "./sources";
 
 /** MVP storage for aggregated job listings. */
@@ -76,17 +80,41 @@ async function writeJobs(jobs: DiscoveredJob[]): Promise<void> {
   await fs.writeFile(DATA_FILE, JSON.stringify(jobs, null, 2), "utf-8");
 }
 
-function matchesSearchText(job: DiscoveredJob, terms: string[]): boolean {
-  const text = [
-    job.title,
-    job.company,
-    job.description ?? "",
-    ...(job.tags ?? []),
-  ]
-    .join(" ")
-    .toLowerCase();
+function filterJobs(
+  jobs: DiscoveredJob[],
+  input: DiscoverJobsInput,
+  intentQueries: string[],
+): DiscoveredJob[] {
+  const excludedKeywords = input.excludedKeywords ?? [];
 
-  return terms.some((term) => text.includes(term));
+  return jobs.filter((job) => {
+    if (!passesAnyIntentGate(job, intentQueries)) {
+      return false;
+    }
+
+    if (input.remoteOnly && !job.remote) {
+      return false;
+    }
+
+    if (
+      input.remotePreference &&
+      !matchesRemotePreference(job, input.remotePreference)
+    ) {
+      return false;
+    }
+
+    if (excludedKeywords.length > 0 && matchesExcludedKeywords(job, excludedKeywords)) {
+      return false;
+    }
+
+    if (input.location?.trim()) {
+      if (!matchesLocationFilter(job, input.location)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
 }
 
 function jobSearchText(
@@ -124,52 +152,33 @@ function matchesRemotePreference(
   return true;
 }
 
-function filterJobs(
-  jobs: DiscoveredJob[],
-  input: DiscoverJobsInput,
-): DiscoveredJob[] {
-  const queryTerms = input.query
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((term) => term.length > 1);
+/**
+ * Location filter supports comma-separated places from the profile/UI (e.g.
+ * "USA, Canada"). A job matches if its location contains any segment.
+ */
+function matchesLocationFilter(job: DiscoveredJob, locationFilter: string): boolean {
+  const raw = locationFilter.trim().toLowerCase();
 
-  const keywordTerms =
-    input.keywords?.map((kw) => kw.toLowerCase().trim()).filter(Boolean) ?? [];
+  if (!raw) {
+    return true;
+  }
 
-  const searchTerms = [...new Set([...queryTerms, ...keywordTerms])];
-  const excludedKeywords = input.excludedKeywords ?? [];
+  const segments = raw
+    .split(",")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
 
-  return jobs.filter((job) => {
-    if (input.remoteOnly && !job.remote) {
-      return false;
-    }
+  if (segments.length === 0) {
+    return true;
+  }
 
-    if (
-      input.remotePreference &&
-      !matchesRemotePreference(job, input.remotePreference)
-    ) {
-      return false;
-    }
+  const jobLocation = job.location?.toLowerCase() ?? "";
 
-    if (excludedKeywords.length > 0 && matchesExcludedKeywords(job, excludedKeywords)) {
-      return false;
-    }
+  if (!jobLocation.trim() && job.remote) {
+    return true;
+  }
 
-    if (input.location?.trim()) {
-      const locationNeedle = input.location.trim().toLowerCase();
-      const jobLocation = job.location?.toLowerCase() ?? "";
-
-      if (!jobLocation.includes(locationNeedle)) {
-        return false;
-      }
-    }
-
-    if (searchTerms.length === 0) {
-      return true;
-    }
-
-    return matchesSearchText(job, searchTerms);
-  });
+  return segments.some((segment) => jobLocation.includes(segment));
 }
 
 function scoringFromProfile(
@@ -183,7 +192,22 @@ function scoringFromProfile(
     coreSkills: profile.coreSkills,
     preferredKeywords: profile.preferredKeywords,
     experienceLevel: profile.experienceLevel,
+    useProfileSignals: true,
   };
+}
+
+function logDiscoveryDebug(payload: {
+  mode: "manual" | "profile";
+  query: string;
+  expandedQueries: string[];
+  activeSources: string[];
+  fetchedPerSource: Record<string, number>;
+  afterFilter: number;
+  topRanked: { title: string; relevanceScore: number; source: string }[];
+}) {
+  console.log(
+    `[job-discovery] ${payload.mode} query=${JSON.stringify(payload.query)} expandedQueries=${JSON.stringify(payload.expandedQueries)} activeSources=${JSON.stringify(payload.activeSources)} fetchedPerSource=${JSON.stringify(payload.fetchedPerSource)} afterFilter=${payload.afterFilter} topRanked=${JSON.stringify(payload.topRanked)}`,
+  );
 }
 
 /**
@@ -251,15 +275,105 @@ export function buildDiscoveryQueriesFromProfile(
   return queries;
 }
 
+function balanceSources(
+  sortedJobs: DiscoveredJob[],
+  limit: number,
+  preferBalanceNonTech: boolean,
+): DiscoveredJob[] {
+  if (!preferBalanceNonTech || sortedJobs.length <= 2) {
+    return sortedJobs.slice(0, limit);
+  }
+
+  const adzuna = sortedJobs.filter((job) => job.source === "adzuna");
+  const other = sortedJobs.filter((job) => job.source !== "adzuna");
+
+  if (adzuna.length === 0 || other.length === 0) {
+    return sortedJobs.slice(0, limit);
+  }
+
+  const merged: DiscoveredJob[] = [];
+  let pickAdzuna = true;
+  let i = 0;
+  let j = 0;
+
+  while (
+    merged.length < limit &&
+    (i < adzuna.length || j < other.length)
+  ) {
+    if (pickAdzuna && i < adzuna.length) {
+      merged.push(adzuna[i]);
+      i++;
+    } else if (!pickAdzuna && j < other.length) {
+      merged.push(other[j]);
+      j++;
+    } else if (i < adzuna.length) {
+      merged.push(adzuna[i]);
+      i++;
+    } else if (j < other.length) {
+      merged.push(other[j]);
+      j++;
+    }
+
+    pickAdzuna = !pickAdzuna;
+  }
+
+  return merged;
+}
+
+async function fetchExpandedJobsAggregated(
+  input: DiscoverJobsInput,
+  memo?: FetchDiscoveryMemo,
+): Promise<{
+  merged: DiscoveredJob[];
+  aggregatedFetchedPerSource: Record<string, number>;
+}> {
+  const variants = expandSearchQueries(input.query);
+  const aggregatedFetchedPerSource: Record<string, number> = {};
+  const merged: DiscoveredJob[] = [];
+  const seenKeys = new Set<string>();
+
+  for (const variant of variants) {
+    const { jobs, fetchedPerSource } = await fetchJobsForDiscovery(
+      {
+        query: variant,
+        location: input.location,
+      },
+      memo,
+    );
+
+    for (const [source, count] of Object.entries(fetchedPerSource)) {
+      aggregatedFetchedPerSource[source] =
+        (aggregatedFetchedPerSource[source] ?? 0) + count;
+    }
+
+    for (const job of jobs) {
+      const key = jobDedupeKey(job);
+
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        merged.push(job);
+      }
+    }
+  }
+
+  return { merged, aggregatedFetchedPerSource };
+}
+
 async function scoreAndRankJobs(
   jobs: DiscoveredJob[],
   scoring: ScoringPreferences,
+  expandedQueriesForOverlap: string[],
 ): Promise<DiscoveredJob[]> {
-  const scored = jobs.map((job) => ({
-    ...job,
-    relevanceScore: scoreJob(job, scoring),
-    discoveredAt: new Date().toISOString(),
-  }));
+  const scored = jobs.map((job) => {
+    const ranked = scoreDiscoveryRanking(job, scoring, expandedQueriesForOverlap);
+
+    return {
+      ...job,
+      relevanceScore: ranked.relevanceScore,
+      freshnessScore: ranked.freshnessScore,
+      discoveredAt: new Date().toISOString(),
+    };
+  });
 
   scored.sort((a, b) => (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0));
 
@@ -304,20 +418,53 @@ export async function getDiscoveredJob(id: string): Promise<DiscoveredJob> {
   return job;
 }
 
-export async function listDiscoveredJobs(): Promise<DiscoveredJob[]> {
+/**
+ * Lists jobs from storage. Without a search scope, sorts by newest first so
+ * stale relevance scores from older searches do not bury recent results.
+ * With filters, applies the same rules as discovery (incl. remote / location)
+ * and re-scores for the current query so ranking matches what you searched.
+ */
+export async function listDiscoveredJobs(
+  filters?: DiscoverJobsInput | null,
+): Promise<DiscoveredJob[]> {
   const jobs = await readJobs();
 
-  return jobs.sort((a, b) => {
-    const scoreDiff = (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0);
-
-    if (scoreDiff !== 0) {
-      return scoreDiff;
-    }
-
-    return (
-      new Date(b.discoveredAt).getTime() - new Date(a.discoveredAt).getTime()
+  if (!filters?.query?.trim()) {
+    return [...jobs].sort(
+      (a, b) =>
+        new Date(b.discoveredAt).getTime() - new Date(a.discoveredAt).getTime(),
     );
+  }
+
+  const intents = expandSearchQueries(filters.query);
+
+  const filtered = filterJobs(jobs, filters, intents);
+
+  const expandedQueriesForOverlap = intents.slice(1);
+
+  const scoring: ScoringPreferences = {
+    query: filters.query,
+    keywords: filters.keywords,
+    useProfileSignals: false,
+  };
+
+  const rescored = filtered.map((job) => {
+    const ranked = scoreDiscoveryRanking(
+      job,
+      scoring,
+      expandedQueriesForOverlap,
+    );
+
+    return {
+      ...job,
+      relevanceScore: ranked.relevanceScore,
+      freshnessScore: ranked.freshnessScore,
+    };
   });
+
+  rescored.sort((a, b) => (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0));
+
+  return rescored;
 }
 
 /**
@@ -326,17 +473,43 @@ export async function listDiscoveredJobs(): Promise<DiscoveredJob[]> {
 export async function discoverJobs(
   input: DiscoverJobsInput,
 ): Promise<DiscoveredJob[]> {
-  const fetched = await fetchAllJobSources({
-    query: input.query,
-    location: input.location,
-  });
-  const filtered = filterJobs(fetched, input);
+  const activeSources = getActiveJobSources();
+  const intents = expandSearchQueries(input.query);
+
+  const memo: FetchDiscoveryMemo = {};
+
+  const { merged, aggregatedFetchedPerSource } =
+    await fetchExpandedJobsAggregated(input, memo);
+
+  const filtered = filterJobs(merged, input, intents);
+
+  const expandedQueriesForOverlap = intents.slice(1);
+
   const scored = await scoreAndRankJobs(filtered, {
     query: input.query,
     keywords: input.keywords,
+    useProfileSignals: false,
+  }, expandedQueriesForOverlap);
+
+  const preferBalance = !isLikelyTechRoleQuery(input.query);
+
+  const balanced = balanceSources(scored, MAX_RESULTS_PER_RUN, preferBalance);
+
+  logDiscoveryDebug({
+    mode: "manual",
+    query: input.query,
+    expandedQueries: intents,
+    activeSources,
+    fetchedPerSource: aggregatedFetchedPerSource,
+    afterFilter: filtered.length,
+    topRanked: balanced.slice(0, 8).map((job) => ({
+      title: job.title,
+      relevanceScore: job.relevanceScore ?? 0,
+      source: job.source,
+    })),
   });
 
-  return persistDiscoveredJobs(scored);
+  return persistDiscoveredJobs(balanced);
 }
 
 export type DiscoverJobsFromProfileResult = {
@@ -362,21 +535,45 @@ export async function discoverJobsFromProfile(): Promise<DiscoverJobsFromProfile
   }
 
   const queries = buildDiscoveryQueriesFromProfile(profile);
-  const bulkJobs = await fetchBulkJobSources();
+  const activeSources = getActiveJobSources();
   const combined: DiscoveredJob[] = [];
+  const memo: FetchDiscoveryMemo = {};
 
   for (const input of queries) {
-    const searchJobs = await fetchSearchJobSources({
-      query: input.query,
-      location: input.location,
-    });
-    const fetched = [...bulkJobs, ...searchJobs];
-    const filtered = filterJobs(fetched, input);
+    const intents = expandSearchQueries(input.query);
+
+    const { merged, aggregatedFetchedPerSource } =
+      await fetchExpandedJobsAggregated(input, memo);
+
+    const filtered = filterJobs(merged, input, intents);
+
+    const expandedQueriesForOverlap = intents.slice(1);
+
     const scored = await scoreAndRankJobs(
       filtered,
       scoringFromProfile(profile, input),
+      expandedQueriesForOverlap,
     );
-    combined.push(...scored);
+
+    const preferBalance = !isLikelyTechRoleQuery(input.query);
+
+    const balanced = balanceSources(scored, MAX_RESULTS_PER_RUN, preferBalance);
+
+    logDiscoveryDebug({
+      mode: "profile",
+      query: input.query,
+      expandedQueries: intents,
+      activeSources,
+      fetchedPerSource: aggregatedFetchedPerSource,
+      afterFilter: filtered.length,
+      topRanked: balanced.slice(0, 8).map((job) => ({
+        title: job.title,
+        relevanceScore: job.relevanceScore ?? 0,
+        source: job.source,
+      })),
+    });
+
+    combined.push(...balanced);
   }
 
   const deduped = dedupeJobs(combined);

@@ -42,9 +42,13 @@ export function JobCard({ job }: JobCardProps) {
 
       {job.tags && job.tags.length > 0 && (
         <ul className="mb-3 flex flex-wrap gap-2">
-          {job.tags.slice(0, 8).map((tag) => (
+          {Array.from(
+            new Set(job.tags.map((tag) => tag.trim()).filter(Boolean)),
+          )
+            .slice(0, 8)
+            .map((tag, index) => (
             <li
-              key={tag}
+              key={`${job.id}-tag-${index}-${tag}`}
               className="rounded-full border border-card-border bg-background px-2.5 py-0.5 text-xs text-foreground"
             >
               {tag}

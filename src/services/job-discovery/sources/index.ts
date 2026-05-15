@@ -1,4 +1,5 @@
 import type { DiscoveredJob } from "@/types/job";
+import { isLikelyTechRoleQuery } from "../query-match";
 import { fetchAdzunaJobs, isAdzunaConfigured } from "./adzuna";
 import { fetchRemoteOkJobs } from "./remoteok";
 
@@ -8,6 +9,12 @@ const USER_AGENT =
 export type JobSourceFetchOptions = {
   query: string;
   location?: string;
+};
+
+export type FetchDiscoverySourcesResult = {
+  jobs: DiscoveredJob[];
+  /** Count of raw rows returned per source before merge/dedupe */
+  fetchedPerSource: Record<string, number>;
 };
 
 /** Sources that are configured and may be used in a discovery run. */
@@ -66,19 +73,64 @@ export async function fetchSearchJobSources(
   return adzuna;
 }
 
-/**
- * Fetches from all available sources and merges listings.
- * Failures in one source do not block others.
- */
-export async function fetchAllJobSources(
-  options: JobSourceFetchOptions,
-): Promise<DiscoveredJob[]> {
-  const [bulk, search] = await Promise.all([
-    fetchBulkJobSources(),
-    fetchSearchJobSources(options),
-  ]);
+export type FetchDiscoveryMemo = {
+  remoteOkBulk?: DiscoveredJob[];
+};
 
-  return [...bulk, ...search];
+/**
+ * Chooses sources by query shape: non-tech queries prefer Adzuna (broader industries)
+ * and skip RemoteOK bulk when Adzuna is configured so tech-heavy feeds do not dominate.
+ */
+export async function fetchJobsForDiscovery(
+  options: JobSourceFetchOptions,
+  memo?: FetchDiscoveryMemo,
+): Promise<FetchDiscoverySourcesResult> {
+  const tech = isLikelyTechRoleQuery(options.query);
+  const adzunaOn = isAdzunaConfigured();
+
+  const fetchedPerSource: Record<string, number> = {};
+
+  const adzunaResults = adzunaOn
+    ? await safeFetchSource("adzuna", () =>
+        fetchAdzunaJobs({
+          query: options.query,
+          location: options.location,
+        }),
+      )
+    : [];
+
+  fetchedPerSource.adzuna = adzunaResults.length;
+
+  if (!tech && adzunaOn && adzunaResults.length > 0) {
+    return {
+      jobs: adzunaResults,
+      fetchedPerSource,
+    };
+  }
+
+  let remoteOkResults = memo?.remoteOkBulk;
+
+  if (remoteOkResults === undefined) {
+    remoteOkResults = await safeFetchSource("remoteok", fetchRemoteOkJobs);
+
+    if (memo) {
+      memo.remoteOkBulk = remoteOkResults;
+    }
+  }
+
+  fetchedPerSource.remoteok = remoteOkResults.length;
+
+  if (!tech && adzunaOn && adzunaResults.length === 0) {
+    return {
+      jobs: remoteOkResults,
+      fetchedPerSource,
+    };
+  }
+
+  return {
+    jobs: [...remoteOkResults, ...adzunaResults],
+    fetchedPerSource,
+  };
 }
 
 export { USER_AGENT };

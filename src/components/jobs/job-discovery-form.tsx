@@ -105,6 +105,14 @@ export function JobDiscoveryForm({
           />
           Remote only
         </label>
+        <p className="text-xs text-muted">
+          Tip: leave unchecked for onsite-heavy roles (nursing, retail). RemoteOK
+          listings skew tech-remote; Adzuna keys in{" "}
+          <code className="rounded bg-background px-1 py-0.5 text-[11px]">
+            .env.local
+          </code>{" "}
+          widen industries.
+        </p>
 
         <button
           type="submit"

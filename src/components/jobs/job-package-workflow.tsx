@@ -227,9 +227,11 @@ export function JobPackageWorkflow({ jobId }: JobPackageWorkflowProps) {
         )}
         {job.tags && job.tags.length > 0 && (
           <ul className="mt-3 flex flex-wrap gap-2">
-            {job.tags.map((tag) => (
+            {Array.from(
+              new Set(job.tags.map((tag) => tag.trim()).filter(Boolean)),
+            ).map((tag, index) => (
               <li
-                key={tag}
+                key={`${job.id}-tag-${index}-${tag}`}
                 className="rounded-full border border-card-border bg-background px-2.5 py-0.5 text-xs"
               >
                 {tag}
