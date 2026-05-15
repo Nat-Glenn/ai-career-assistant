@@ -115,8 +115,9 @@ export function JobDiscoveryForm({
         </button>
       </form>
       <p className="mt-3 text-xs text-muted">
-        Jobs are aggregated from the public RemoteOK API. Results are filtered
-        and ranked on your server — no LinkedIn or Indeed scraping.
+        Jobs are aggregated from public APIs (RemoteOK, and Adzuna when
+        configured). Results are filtered and ranked on your server — no
+        LinkedIn or Indeed scraping.
       </p>
     </section>
   );

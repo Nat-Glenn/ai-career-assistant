@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { discoverJobsSchema } from "@/lib/validators";
 import {
   discoverJobs,
+  getActiveJobSources,
   listDiscoveredJobs,
 } from "@/services/job-discovery";
 
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
         data,
         meta: {
           count: data.length,
-          source: "remoteok",
+          sources: getActiveJobSources(),
         },
       },
       { status: 200 },

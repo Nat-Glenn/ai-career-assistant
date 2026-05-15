@@ -8,7 +8,12 @@ import type { RemotePreference, UserProfile } from "@/types/profile";
 import { getProfile } from "@/services/profile";
 import { dedupeJobs } from "./dedupe";
 import { scoreJob, type ScoringPreferences } from "./scoring";
-import { fetchRemoteOkJobs } from "./sources/remoteok";
+import {
+  fetchAllJobSources,
+  fetchBulkJobSources,
+  fetchSearchJobSources,
+  getActiveJobSources,
+} from "./sources";
 
 /** MVP storage for aggregated job listings. */
 const DATA_FILE = path.join(process.cwd(), "data", "jobs.json");
@@ -321,7 +326,10 @@ export async function listDiscoveredJobs(): Promise<DiscoveredJob[]> {
 export async function discoverJobs(
   input: DiscoverJobsInput,
 ): Promise<DiscoveredJob[]> {
-  const fetched = await fetchRemoteOkJobs();
+  const fetched = await fetchAllJobSources({
+    query: input.query,
+    location: input.location,
+  });
   const filtered = filterJobs(fetched, input);
   const scored = await scoreAndRankJobs(filtered, {
     query: input.query,
@@ -337,7 +345,7 @@ export type DiscoverJobsFromProfileResult = {
     count: number;
     queriesRun: number;
     roles: string[];
-    source: string;
+    sources: string[];
   };
 };
 
@@ -354,10 +362,15 @@ export async function discoverJobsFromProfile(): Promise<DiscoverJobsFromProfile
   }
 
   const queries = buildDiscoveryQueriesFromProfile(profile);
-  const fetched = await fetchRemoteOkJobs();
+  const bulkJobs = await fetchBulkJobSources();
   const combined: DiscoveredJob[] = [];
 
   for (const input of queries) {
+    const searchJobs = await fetchSearchJobSources({
+      query: input.query,
+      location: input.location,
+    });
+    const fetched = [...bulkJobs, ...searchJobs];
     const filtered = filterJobs(fetched, input);
     const scored = await scoreAndRankJobs(
       filtered,
@@ -377,7 +390,9 @@ export async function discoverJobsFromProfile(): Promise<DiscoverJobsFromProfile
       count: jobs.length,
       queriesRun: queries.length,
       roles: profile.targetRoles,
-      source: "remoteok",
+      sources: getActiveJobSources(),
     },
   };
 }
+
+export { getActiveJobSources };
