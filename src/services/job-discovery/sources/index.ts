@@ -1,6 +1,7 @@
 import type { DiscoveredJob } from "@/types/job";
 import { isLikelyTechRoleQuery } from "../query-match";
 import { fetchAdzunaJobs, isAdzunaConfigured } from "./adzuna";
+import { fetchJSearchJobs, isJSearchConfigured } from "./jsearch";
 import { fetchRemoteOkJobs } from "./remoteok";
 
 const USER_AGENT =
@@ -9,6 +10,8 @@ const USER_AGENT =
 export type JobSourceFetchOptions = {
   query: string;
   location?: string;
+  /** Optional primary query used for source selection across expanded variants. */
+  sourceQuery?: string;
 };
 
 export type FetchDiscoverySourcesResult = {
@@ -25,6 +28,10 @@ export function getActiveJobSources(): string[] {
 
   if (isAdzunaConfigured()) {
     sources.push("adzuna");
+  }
+
+  if (isJSearchConfigured()) {
+    sources.push("jsearch");
   }
 
   return sources;
@@ -61,18 +68,26 @@ export async function fetchBulkJobSources(): Promise<DiscoveredJob[]> {
 export async function fetchSearchJobSources(
   options: JobSourceFetchOptions,
 ): Promise<DiscoveredJob[]> {
-  if (!isAdzunaConfigured()) {
-    return [];
-  }
+  const [adzuna, jsearch] = await Promise.all([
+    isAdzunaConfigured()
+      ? safeFetchSource("adzuna", () =>
+          fetchAdzunaJobs({
+            query: options.query,
+            location: options.location,
+          }),
+        )
+      : Promise.resolve([]),
+    isJSearchConfigured()
+      ? safeFetchSource("jsearch", () =>
+          fetchJSearchJobs({
+            query: options.query,
+            location: options.location,
+          }),
+        )
+      : Promise.resolve([]),
+  ]);
 
-  const adzuna = await safeFetchSource("adzuna", () =>
-    fetchAdzunaJobs({
-      query: options.query,
-      location: options.location,
-    }),
-  );
-
-  return adzuna;
+  return [...adzuna, ...jsearch];
 }
 
 export type FetchDiscoveryMemo = {
@@ -81,37 +96,55 @@ export type FetchDiscoveryMemo = {
 
 /**
  * Source selection:
- * - Tech / cloud / software: RemoteOK + Adzuna (when configured).
- * - Non-tech: Adzuna only. RemoteOK is never used (tech-heavy remote feed).
- *   If Adzuna is not configured, returns an empty job list.
+ * - Tech / cloud / software: RemoteOK + configured broad search APIs.
+ * - Non-tech: configured broad search APIs only. RemoteOK is never used
+ *   for non-tech because the feed is heavily remote/tech skewed.
  */
 export async function fetchJobsForDiscovery(
   options: JobSourceFetchOptions,
   memo?: FetchDiscoveryMemo,
 ): Promise<FetchDiscoverySourcesResult> {
-  const tech = isLikelyTechRoleQuery(options.query);
+  const tech = isLikelyTechRoleQuery(options.sourceQuery ?? options.query);
   const adzunaOn = isAdzunaConfigured();
+  const jsearchOn = isJSearchConfigured();
 
   const fetchedPerSource: Record<string, number> = {};
+  const selectedSources = new Set<string>();
 
-  const adzunaResults = adzunaOn
-    ? await safeFetchSource("adzuna", () =>
-        fetchAdzunaJobs({
-          query: options.query,
-          location: options.location,
-        }),
-      )
-    : [];
+  const [adzunaResults, jsearchResults] = await Promise.all([
+    adzunaOn
+      ? safeFetchSource("adzuna", () =>
+          fetchAdzunaJobs({
+            query: options.query,
+            location: options.location,
+          }),
+        )
+      : Promise.resolve([]),
+    jsearchOn
+      ? safeFetchSource("jsearch", () =>
+          fetchJSearchJobs({
+            query: options.query,
+            location: options.location,
+          }),
+        )
+      : Promise.resolve([]),
+  ]);
 
-  fetchedPerSource.adzuna = adzunaResults.length;
+  if (adzunaOn) {
+    fetchedPerSource.adzuna = adzunaResults.length;
+    selectedSources.add("adzuna");
+  }
+
+  if (jsearchOn) {
+    fetchedPerSource.jsearch = jsearchResults.length;
+    selectedSources.add("jsearch");
+  }
 
   if (!tech) {
-    const selectedSources = adzunaOn ? ["adzuna"] : [];
-
     return {
-      jobs: adzunaResults,
+      jobs: [...adzunaResults, ...jsearchResults],
       fetchedPerSource,
-      selectedSources,
+      selectedSources: Array.from(selectedSources),
     };
   }
 
@@ -126,14 +159,12 @@ export async function fetchJobsForDiscovery(
   }
 
   fetchedPerSource.remoteok = remoteOkResults.length;
-
-  const selectedSources =
-    adzunaOn ? (["remoteok", "adzuna"] as const) : (["remoteok"] as const);
+  selectedSources.add("remoteok");
 
   return {
-    jobs: [...remoteOkResults, ...adzunaResults],
+    jobs: [...remoteOkResults, ...adzunaResults, ...jsearchResults],
     fetchedPerSource,
-    selectedSources: [...selectedSources],
+    selectedSources: Array.from(selectedSources),
   };
 }
 

@@ -6,6 +6,8 @@ export type StrictSearchDomain =
   | "healthcare"
   | "marketing"
   | "accounting"
+  | "customerService"
+  | "projectManagement"
   | "tech"
   | "general";
 
@@ -49,6 +51,22 @@ export function detectStrictSearchDomain(rawQuery: string): StrictSearchDomain {
     )
   ) {
     return "accounting";
+  }
+
+  if (
+    /\bcustomer\s+service\b|\bcustomer\s+support\b|\bsupport\s+representative\b|\bcall\s+center\b|\bcontact\s+center\b|\bclient\s+service\b|\bcustomer\s+success\b|\bcsr\b|\bhelp\s+desk\b/.test(
+      q,
+    )
+  ) {
+    return "customerService";
+  }
+
+  if (
+    /\bproject\s+manager\b|\bproject\s+management\b|\bprogram\s+manager\b|\bprogram\s+management\b|\bproject\s+coordinator\b|\bproject\s+administrator\b|\bpmo\b|\bscrum\s+master\b/.test(
+      q,
+    )
+  ) {
+    return "projectManagement";
   }
 
   if (isLikelyTechRoleQuery(rawQuery)) {
@@ -126,6 +144,33 @@ const SIGNALS: Record<
     /\btax\s+prep/i,
     /\bcontroller\b/,
     /\bfinance\s+assistant\b/,
+  ],
+  customerService: [
+    /\bcustomer\s+service\b/,
+    /\bcustomer\s+support\b/,
+    /\bsupport\s+representative\b/,
+    /\bcall\s+center\b/,
+    /\bcontact\s+center\b/,
+    /\bclient\s+service\b/,
+    /\bcustomer\s+success\b/,
+    /\bcsr\b/,
+    /\bhelp\s+desk\b/,
+    /\bservice\s+representative\b/,
+    /\bmember\s+service\b/,
+    /\bguest\s+service\b/,
+  ],
+  projectManagement: [
+    /\bproject\s+manager\b/,
+    /\bproject\s+management\b/,
+    /\bprogram\s+manager\b/,
+    /\bprogram\s+management\b/,
+    /\bproject\s+coordinator\b/,
+    /\bproject\s+administrator\b/,
+    /\bpmo\b/,
+    /\bscrum\s+master\b/,
+    /\bimplementation\s+manager\b/,
+    /\bdelivery\s+manager\b/,
+    /\bproject\s+lead\b/,
   ],
   tech: [
     /\bsoftware\b/,

@@ -117,12 +117,28 @@ const DOMAIN_EXPANSION_RULES: ExpansionRule[] = [
   },
   {
     test: (q) =>
+      /\bcustomer\s+service\b/.test(q) ||
+      /\bcustomer\s+support\b/.test(q) ||
+      /\bcall\s+center\b/.test(q) ||
+      /\bcustomer\s+success\b/.test(q),
+    phrases: [
+      "Customer Service Representative",
+      "Customer Support Specialist",
+      "Client Service Representative",
+      "Call Center Representative",
+      "Customer Success Associate",
+    ],
+  },
+  {
+    test: (q) =>
       /\bproject\s+manager\b/.test(q) ||
+      /\bproject\s+management\b/.test(q) ||
       /\bprogram\s+manager\b/.test(q),
     phrases: [
+      "Project Manager",
       "Program Manager",
       "Project Coordinator",
-      "Technical Program Manager",
+      "Operations Project Manager",
       "Scrum Master",
     ],
   },

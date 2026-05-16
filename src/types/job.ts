@@ -10,6 +10,7 @@ export const discoveredJobSchema = z.object({
   location: z.string().optional(),
   remote: z.boolean(),
   source: z.string(),
+  sourceType: z.enum(["api", "feed", "ats"]).optional(),
   url: z.string().url(),
   description: z.string().optional(),
   tags: z.array(z.string()).optional(),

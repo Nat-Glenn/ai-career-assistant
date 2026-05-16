@@ -86,6 +86,7 @@ function mapToDiscoveredJob(row: RemoteOkRawJob): DiscoveredJob | null {
     location: row.location?.trim() || undefined,
     remote: true,
     source: "remoteok",
+    sourceType: "feed",
     url,
     description,
     tags: Array.isArray(row.tags)

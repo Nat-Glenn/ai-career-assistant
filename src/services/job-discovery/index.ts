@@ -212,11 +212,81 @@ function logDiscoveryDebug(payload: {
   selectedSources: string[];
   fetchedPerSource: Record<string, number>;
   afterFilter: number;
-  topTitles: string[];
+  topRanked: {
+    title: string;
+    source: string;
+    relevanceScore: number;
+    freshnessScore?: number;
+  }[];
+  freshnessDistribution: Record<string, number>;
 }) {
   console.log(
-    `[job-discovery] ${payload.mode} query=${JSON.stringify(payload.query)} expandedQueries=${JSON.stringify(payload.expandedQueries)} selectedSources=${JSON.stringify(payload.selectedSources)} fetchedPerSource=${JSON.stringify(payload.fetchedPerSource)} afterFilter=${payload.afterFilter} topTitles=${JSON.stringify(payload.topTitles)}`,
+    `[job-discovery] ${payload.mode} query=${JSON.stringify(payload.query)} expandedQueries=${JSON.stringify(payload.expandedQueries)} selectedSources=${JSON.stringify(payload.selectedSources)} fetchedPerSource=${JSON.stringify(payload.fetchedPerSource)} afterFilter=${payload.afterFilter} freshnessDistribution=${JSON.stringify(payload.freshnessDistribution)} topRanked=${JSON.stringify(payload.topRanked)}`,
   );
+}
+
+function buildTopRankedLog(jobs: DiscoveredJob[]) {
+  return jobs.slice(0, 10).map((job) => ({
+    title: job.title,
+    source: job.source,
+    relevanceScore: job.relevanceScore ?? 0,
+    freshnessScore: job.freshnessScore,
+  }));
+}
+
+function freshnessBucket(job: DiscoveredJob): string {
+  if (!job.postedAt) {
+    return "unknown";
+  }
+
+  const parsed = Date.parse(job.postedAt);
+
+  if (Number.isNaN(parsed)) {
+    return "unknown";
+  }
+
+  const ageDays = (Date.now() - parsed) / 86_400_000;
+
+  if (ageDays <= 3) {
+    return "0-3d";
+  }
+
+  if (ageDays <= 7) {
+    return "4-7d";
+  }
+
+  if (ageDays <= 14) {
+    return "8-14d";
+  }
+
+  if (ageDays <= 30) {
+    return "15-30d";
+  }
+
+  if (ageDays <= 45) {
+    return "31-45d";
+  }
+
+  return "46d+";
+}
+
+function buildFreshnessDistribution(jobs: DiscoveredJob[]): Record<string, number> {
+  const distribution: Record<string, number> = {
+    "0-3d": 0,
+    "4-7d": 0,
+    "8-14d": 0,
+    "15-30d": 0,
+    "31-45d": 0,
+    "46d+": 0,
+    unknown: 0,
+  };
+
+  for (const job of jobs) {
+    const bucket = freshnessBucket(job);
+    distribution[bucket] = (distribution[bucket] ?? 0) + 1;
+  }
+
+  return distribution;
 }
 
 /**
@@ -349,6 +419,7 @@ async function fetchExpandedJobsAggregated(
         {
           query: variant,
           location: input.location,
+          sourceQuery: input.query,
         },
         memo,
       );
@@ -524,7 +595,8 @@ export async function discoverJobs(
     selectedSources,
     fetchedPerSource: aggregatedFetchedPerSource,
     afterFilter: filtered.length,
-    topTitles: balanced.slice(0, 10).map((job) => job.title),
+    freshnessDistribution: buildFreshnessDistribution(balanced),
+    topRanked: buildTopRankedLog(balanced),
   });
 
   return persistDiscoveredJobs(balanced);
@@ -591,7 +663,8 @@ export async function discoverJobsFromProfile(): Promise<DiscoverJobsFromProfile
       selectedSources,
       fetchedPerSource: aggregatedFetchedPerSource,
       afterFilter: filtered.length,
-      topTitles: balanced.slice(0, 10).map((job) => job.title),
+      freshnessDistribution: buildFreshnessDistribution(balanced),
+      topRanked: buildTopRankedLog(balanced),
     });
 
     combined.push(...balanced);

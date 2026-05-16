@@ -102,6 +102,7 @@ function mapToDiscoveredJob(row: AdzunaRawJob): DiscoveredJob | null {
     location: buildLocation(row),
     remote: inferRemote(row),
     source: "adzuna",
+    sourceType: "api",
     url: row.redirect_url,
     description,
     tags,
